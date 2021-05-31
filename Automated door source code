@@ -1,103 +1,96 @@
-#include <ESP8266WiFi.h>
+#include <Wire.h>
 #include <Adafruit_MLX90614.h>
-#include<Servo.h>
-#include "dht.h"
-#define TrigPin 6 //ultrasonic transmit ultrasound
-#define echoPin 7 //observing echo of ultrasound
-#define Relay_1 0 // relay define for eletrical units
-#define Relay_2 1
-#define Relay_3 3
-#define Relay_4 4
-#define dht_pin A0
-Servo servo;      //create servo object
-dht DHT;
-Adafruit_MLX90614 mlx = Adafruit_MLX90614(); //create mlx function >>NOT sure sam<<
-int angle = 10;    //define servo angle 
-int Ir =0 ;
-long duration;
-int distance;
+#include <Servo.h>
 
-void setup() 
+Adafruit_MLX90614 mlx = Adafruit_MLX90614();
+
+int sensor_us_trig=D5;
+int sensor_us_echo=D6;
+int servo_pin=D7;
+int relay_pin=D4;
+
+Servo serv;
+
+float temp_threshold=99;
+float dist_a=3;
+float dist_b=12;
+
+void setup()
 {
-Serial.begin(115200);
-Serial.println("Hello welcome to my Minor project");
-pinMode(Ir,INPUT);
-pinMode(TrigPin,INPUT);
-pinMode(echoPin,OUTPUT);
-pinMode(Relay_1,OUTPUT);
-pinMode(Relay_2,OUTPUT);
-pinMode(Relay_3,OUTPUT);
-pinMode(Relay_4,OUTPUT);
-mlx.begin();
-servo.attach(8);
-servo.write(angle);  
+  mlx.begin();
+  pinMode(sensor_us_trig,OUTPUT);
+  pinMode(sensor_us_echo,INPUT);
+  serv.attach(servo_pin);
+  pinMode(relay_pin,OUTPUT);
+  triggerRelay(false);
+  triggerServo(false);
+  Serial.begin(115200);
+  
 }
-
-void loop() 
+void loop()
 {
-  // ultrasonic
-  digitalWrite(TrigPin,LOW);
-  delay(1000);
-  digitalWrite(TrigPin,HIGH);
-  delay(1000);
-  digitalWrite(TrigPin,LOW);
-  duration=pulseIn(echoPin,HIGH);
-  distance = duration*0.034/2;
-  Serial.println(distance);
-
-//DHT
-DHT.read11(dht_pin);
-float dht_hum=DHT.humidity;
-float dht_temp=DHT.temperature;
-
- //IR
- int sensorstatus = digitalRead(Ir);
-
-//mlx
- Serial.print("Ambient = "); Serial.print(mlx.readAmbientTempC()); 
-  Serial.print("*C\tObject = "); Serial.print(mlx.readObjectTempC()); Serial.println("*C");
-  float Read_object_temp = mlx.readObjectTempC();
-  delay(500);
-
-  if(36 >= Read_object_temp <= 38)
+  float tmp=mlx.readObjectTempF();
+  float tmp2=mlx.readObjectTempC();
+  float us=readUltrasonic();
+  //Serial.println("Temperature :- "+String(tmp)+"°F"+"\tDistance :- "+String(us)); 
+  if(tmp<=temp_threshold)
   {
-    Serial.print(mlx.readObjectTempC());
-    if(distance<=100) //distance should be 1 meter
+    delay(2000);
+    if((us>=dist_a && us<=dist_b))
     {
-         for(angle=10;angle<110;angle++)
-         {
-          servo.write(angle); 
-         }
-         if(sensorstatus == 1)
-         {
-            digitalWrite(Relay_1, HIGH);
-            digitalWrite(Relay_2, HIGH);
-               if( 65>= dht_hum <=30 or dht_temp >= 30 )
-               {
-                 digitalWrite(Relay_3, HIGH);
-                 digitalWrite(Relay_4, HIGH);
-               }
-               else
-               {
-                digitalWrite(Relay_3, LOW);
-                digitalWrite(Relay_4, LOW); 
-               }
-          }
-          else
-          {
-             digitalWrite(Relay_1, LOW);
-             digitalWrite(Relay_2, LOW);
-          }
-          
-    }
-    else
-    {
-         angle = 10;
-         servo.write(angle);
+      Serial.println("Temperature :- "+String(tmp)+"°F");//+"\tDistance :- "+String(us)); 
+      Serial.println("Temperature :- "+String(tmp2)+"°C");
+      triggerRelay(true);
+      triggerServo(true);
+      delay(5000);
+      triggerRelay(false);
+      triggerServo(false);
     }
   }
   else
   {
-  Serial.println("Body temperture is Low/High no entry allowed");
+    Serial.println("WARNING");
+    delay(5000);
   }
+}
+
+float readUltrasonic()
+{
+  float dis;
+  long duration;
+  digitalWrite(sensor_us_trig,LOW);
+  delayMicroseconds(2);
+  digitalWrite(sensor_us_trig,HIGH);
+  delayMicroseconds(10);
+  digitalWrite(sensor_us_trig,LOW);
+  duration=pulseInLong(sensor_us_echo,HIGH);
+  dis=duration*0.017;
+  dis=(dis>=2&&dis<=200)?dis:(-1);
+  return dis;
+}
+
+void triggerRelay(boolean a)
+{
+  if(a)
+  {
+    digitalWrite(relay_pin,LOW);
+  }
+  else
+  {
+    digitalWrite(relay_pin,HIGH);
+  }
+  //digitalWrite(D5,a?LOW:HIGH);
+}
+
+void triggerServo(boolean  a)
+{
+  if(a)
+  {
+    serv.write(180);
+  }
+  else
+  {
+    serv.write(0);
+  }
+  serv.write(a?0:90);
 }
